@@ -5,19 +5,17 @@ import os
 import random
 pygame.font.init()
 
-
-#setting window
 WIN_WIDTH = 500
 WIN_HEIGHT = 800
 
-#load all images
-BIRD_IMGS = [pygame.transform.scale2x(pygame.image.load(os.path.join('imgs', 'bird1.png'))),pygame.transform.scale2x(pygame.image.load(os.path.join('imgs', 'bird2.png'))),pygame.transform.scale2x(pygame.image.load(os.path.join('imgs', 'bird3.png')))]
+BIRD_IMGS = [pygame.transform.scale2x(pygame.image.load(os.path.join('imgs', 'bird1.png'))),
+             pygame.transform.scale2x(pygame.image.load(os.path.join('imgs', 'bird2.png'))),
+             pygame.transform.scale2x(pygame.image.load(os.path.join('imgs', 'bird3.png')))]
 PIPE_IMG = pygame.transform.scale2x(pygame.image.load(os.path.join('imgs', 'pipe.png')))
 BASE_IMG = pygame.transform.scale2x(pygame.image.load(os.path.join('imgs', 'base.png')))
 BG_IMG = pygame.transform.scale2x(pygame.image.load(os.path.join('imgs', 'bg.png')))
 
 STAT_FONT = pygame.font.SysFont('comicsans', 50)
-
 
 class Bird:
     IMGS = BIRD_IMGS
@@ -42,15 +40,12 @@ class Bird:
 
     def move(self):
         self.tick_count += 1
-
         d = self.vel * self.tick_count + 1.5 * self.tick_count**2
         if d >= 16:
             d = 16
         if d < 0:
             d -= 2
-
         self.y = self.y + d
-
         if d < 0 or self.y < self.height + 50:
             if self.tilt < self.MAX_ROTATION:
                 self.tilt = self.MAX_ROTATION
@@ -60,22 +55,21 @@ class Bird:
 
     def draw(self, win):
         self.img_count += 1
-
         if self.img_count < self.ANIMATION_TIME:
             self.img = self.IMGS[0]
-        elif self.img_count < self.ANIMATION_TIME*2:
+        elif self.img_count < self.ANIMATION_TIME * 2:
             self.img = self.IMGS[1]
-        elif self.img_count < self.ANIMATION_TIME*3:
+        elif self.img_count < self.ANIMATION_TIME * 3:
             self.img = self.IMGS[2]
-        elif self.img_count < self.ANIMATION_TIME*4:
+        elif self.img_count < self.ANIMATION_TIME * 4:
             self.img = self.IMGS[1]
-        elif self.img_count == self.ANIMATION_TIME*4 + 1:
+        elif self.img_count == self.ANIMATION_TIME * 4 + 1:
             self.img = self.IMGS[0]
             self.img_count = 0
 
         if self.tilt <= -80:
             self.img = self.IMGS[1]
-            self.img_count = self.ANIMATION_TIME*2
+            self.img_count = self.ANIMATION_TIME * 2
         rotated_image = pygame.transform.rotate(self.img, self.tilt)
         new_rect = rotated_image.get_rect(center=self.img.get_rect(topleft=(self.x, self.y)).center)
         win.blit(rotated_image, new_rect.topleft)
@@ -84,14 +78,13 @@ class Bird:
         return pygame.mask.from_surface(self.img)
 
 class Pipe:
-    GAP = 200
+    GAP = 250  # Wider gap
     VEL = 5
 
     def __init__(self, x):
         self.x = x
         self.height = 0
-        self.gap = 100
-
+        self.gap = self.GAP
         self.top = 0
         self.bottom = 0
         self.PIPE_TOP = pygame.transform.flip(PIPE_IMG, False, True)
@@ -124,7 +117,6 @@ class Pipe:
 
         if t_point or b_point:
             return True
-
         return False
 
 class Base:
@@ -140,10 +132,8 @@ class Base:
     def move(self):
         self.x1 -= self.VEL
         self.x2 -= self.VEL
-
         if self.x1 + self.WIDTH < 0:
             self.x1 = self.x2 + self.WIDTH
-
         if self.x2 + self.WIDTH < 0:
             self.x2 = self.x1 + self.WIDTH
 
@@ -151,18 +141,13 @@ class Base:
         win.blit(self.IMG, (self.x1, self.y))
         win.blit(self.IMG, (self.x2, self.y))
 
-
 def draw_window(win, birds, pipes, base, score):
-    win.blit(BG_IMG, (0,0))
-
+    win.blit(BG_IMG, (0, 0))
     for pipe in pipes:
         pipe.draw(win)
-
     text = STAT_FONT.render("Score: " + str(score), 1, (255, 255, 255))
     win.blit(text, (WIN_WIDTH - 10 - text.get_width(), 10))
-
     base.draw(win)
-
     for bird in birds:
         bird.draw(win)
     pygame.display.update()
@@ -179,18 +164,17 @@ def main(genomes, config):
         g.fitness = 0
         ge.append(g)
 
-
     base = Base(730)
     pipes = [Pipe(600)]
     win = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
     clock = pygame.time.Clock()
-
     score = 0
-
 
     run = True
     while run:
-        clock.tick(30)
+        clock.tick(15)  # Slower for observation
+        print(f"Generation Score: {score}, Birds alive: {len(birds)}")  # Logging
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
@@ -209,10 +193,24 @@ def main(genomes, config):
             bird.move()
             ge[x].fitness += 0.1
 
-            output = nets[x].activate((bird.y, abs(bird.y - pipes[pipe_ind].height), abs(bird.y - pipes[pipe_ind].bottom)))
+            output = nets[x].activate((
+                bird.y,
+                abs(bird.y - pipes[pipe_ind].height),
+                abs(bird.y - pipes[pipe_ind].bottom),
+                pipes[pipe_ind].x - bird.x
+            ))
 
             if output[0] > 0.5:
                 bird.jump()
+
+            if pipes[pipe_ind].x + pipes[pipe_ind].PIPE_TOP.get_width() < bird.x:
+                ge[x].fitness += 0.5
+
+            # Reward staying near the center of the pipe gap
+            center_y = (pipes[pipe_ind].height + pipes[pipe_ind].bottom) / 2
+            distance_to_center = abs(bird.y - center_y)
+            reward = (1 - (distance_to_center / WIN_HEIGHT)) * 0.01
+            ge[x].fitness += reward
 
         add_pipe = False
         rem = []
@@ -251,13 +249,11 @@ def main(genomes, config):
         base.move()
         draw_window(win, birds, pipes, base, score)
 
-
-
 def run(config_path):
-    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet, neat.DefaultStagnation, config_path)
+    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                                neat.DefaultSpeciesSet, neat.DefaultStagnation, config_path)
 
     p = neat.Population(config)
-
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
@@ -269,11 +265,6 @@ if __name__ == "__main__":
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, "config.txt")
     run(config_path)
-
-
-
-
-
 
 
 
